@@ -1,0 +1,7 @@
+[
+    {
+        "name": "details.txt",
+        "description": "Contains context about harsh. If anything is asked about harsh, refer to this file.",
+        "path": "tools/context_files/details.txt"
+    }
+]

@@ -6,55 +6,49 @@ This provides access to your Grafana instance and the surrounding ecosystem.
 
 ## Features
 
-- [x] Search for dashboards
-- [x] Dashboards
-  - [x] Get dashboard by UID
-  - [x] Update or create a dashboard (DISCLAIMER: Be careful with context windows. See https://github.com/grafana/mcp-grafana/issues/101 for details)
-  - [x] Get the title, query string, and datasource information (including UID and type, if available) from every panel in a dashboard
-- [x] List and fetch datasource information
-- [ ] Query datasources
-  - [x] Prometheus
-  - [x] Loki
-    - [x] Log queries
-    - [x] Metric queries
-  - [ ] Tempo
-  - [ ] Pyroscope
-- [x] Query Prometheus metadata
-  - [x] Metric metadata
-  - [x] Metric names
-  - [x] Label names
-  - [x] Label values
-- [x] Query Loki metadata
-  - [x] Label names
-  - [x] Label values
-  - [x] Stats
-- [x] Search, create, update and close incidents
-- [x] Start Sift investigations and view the results
-  - [x] Create Investigations
-  - [x] List Investigations with a limit parameter
-  - [x] Get Investigation
-  - [x] Get Analyses
-  - [x] Find error patterns in logs using Sift
-  - [x] Find slow requests using Sift
-  - [ ] Add tools on the other Sift Checks
-- [ ] Alerting
-  - [x] List and fetch alert rule information
-  - [x] Get alert rule statuses (firing/normal/error/etc.)
-  - [ ] Create and change alert rules
-  - [x] List contact points
-  - [ ] Create and change contact points
-- [x] Access Grafana OnCall functionality
-  - [x] List and manage schedules
-  - [x] Get shift details
-  - [x] Get current on-call users
-  - [x] List teams and users
-  - [ ] List alert groups
-- [x] Admin functionality
-  - [ ] List users
-  - [x] List teams
-  - [ ] List roles
-  - [ ] List assignments of roles
-  - [ ] Debug role assignments
+_The following features are currently available in MCP server. This list is for informational purposes only and does not represent a roadmap or commitment to future features._
+
+### Dashboards
+- **Search for dashboards:** Find dashboards by title or other metadata
+- **Get dashboard by UID:** Retrieve full dashboard details using its unique identifier
+- **Update or create a dashboard:** Modify existing dashboards or create new ones. _Note: Use with caution due to context window limitations; see [issue #101](https://github.com/grafana/mcp-grafana/issues/101)_ 
+- **Get panel queries and datasource info:** Get the title, query string, and datasource information (including UID and type, if available) from every panel in a dashboard
+
+### Datasources
+- **List and fetch datasource information:** View all configured datasources and retrieve detailed information about each.
+    - _Supported datasource types: Prometheus, Loki._
+
+### Prometheus Querying
+- **Query Prometheus:** Execute PromQL queries (supports both instant and range metric queries) against Prometheus datasources.
+- **Query Prometheus metadata:** Retrieve metric metadata, metric names, label names, and label values from Prometheus datasources.
+
+### Loki Querying
+- **Query Loki logs and metrics:** Run both log queries and metric queries using LogQL against Loki datasources.
+- **Query Loki metadata:** Retrieve label names, label values, and stream statistics from Loki datasources.
+
+### Incidents
+- **Search, create, update, and close incidents:** Manage incidents in Grafana Incident, including searching, creating, updating, and resolving incidents.
+
+### Sift Investigations
+- **Create Sift investigations:** Start a new Sift investigation for analyzing logs or traces.
+- **List Sift investigations:** Retrieve a list of Sift investigations, with support for a limit parameter.
+- **Get Sift investigation:** Retrieve details of a specific Sift investigation by its UUID.
+- **Get Sift analyses:** Retrieve a specific analysis from a Sift investigation.
+- **Find error patterns in logs:** Detect elevated error patterns in Loki logs using Sift.
+- **Find slow requests:** Detect slow requests using Sift (Tempo).
+
+### Alerting
+- **List and fetch alert rule information:** View alert rules and their statuses (firing/normal/error/etc.) in Grafana.
+- **List contact points:** View configured notification contact points in Grafana.
+
+### Grafana OnCall
+- **List and manage schedules:** View and manage on-call schedules in Grafana OnCall.
+- **Get shift details:** Retrieve detailed information about specific on-call shifts.
+- **Get current on-call users:** See which users are currently on call for a schedule.
+- **List teams and users:** View all OnCall teams and users.
+
+### Admin
+- **List teams:** View all configured teams in Grafana.
 
 The list of tools is configurable, so you can choose which tools you want to make available to the MCP client.
 This is useful if you don't use certain functionality or if you don't want to take up too much of the context window.
@@ -107,11 +101,22 @@ the OnCall tools, use `--disable-oncall`.
 
 2. You have several options to install `mcp-grafana`:
 
-   - **Docker image**: Use the pre-built Docker image from Docker Hub:
+   - **Docker image**: Use the pre-built Docker image from Docker Hub.
+
+     **Important**: The Docker image's entrypoint is configured to run the MCP server in SSE mode by default, but most users will want to use STDIO mode for direct integration with AI assistants like Claude Desktop:
+
+     1. **STDIO Mode**: For stdio mode you must explicitly override the default with `-t stdio` and include the `-i` flag to keep stdin open:
 
      ```bash
      docker pull mcp/grafana
-     docker run -p 8000:8000 -e GRAFANA_URL=http://localhost:3000 -e GRAFANA_API_KEY=<your service account token> mcp/grafana
+     docker run --rm -i -e GRAFANA_URL=http://localhost:3000 -e GRAFANA_API_KEY=<your service account token> mcp/grafana -t stdio
+     ```
+
+     2. **SSE Mode**: In this mode, the server runs as an HTTP server that clients connect to. You must expose port 8000 using the `-p` flag:
+
+     ```bash
+     docker pull mcp/grafana
+     docker run --rm -p 8000:8000 -e GRAFANA_URL=http://localhost:3000 -e GRAFANA_API_KEY=<your service account token> mcp/grafana
      ```
 
    - **Download binary**: Download the latest release of `mcp-grafana` from the [releases page](https://github.com/grafana/mcp-grafana/releases) and place it in your `$PATH`.
@@ -142,6 +147,8 @@ the OnCall tools, use `--disable-oncall`.
    }
    ```
 
+> Note: if you see `Error: spawn mcp-grafana ENOENT` in Claude Desktop, you need to specify the full path to `mcp-grafana`.
+
    **If using Docker:**
 
    ```json
@@ -152,13 +159,14 @@ the OnCall tools, use `--disable-oncall`.
          "args": [
            "run",
            "--rm",
-           "-p",
-           "8000:8000",
+           "-i",
            "-e",
            "GRAFANA_URL",
            "-e",
            "GRAFANA_API_KEY",
-           "mcp/grafana"
+           "mcp/grafana",
+           "-t",
+           "stdio"
          ],
          "env": {
            "GRAFANA_URL": "http://localhost:3000",
@@ -169,11 +177,11 @@ the OnCall tools, use `--disable-oncall`.
    }
    ```
 
-> Note: if you see `Error: spawn mcp-grafana ENOENT` in Claude Desktop, you need to specify the full path to `mcp-grafana`.
+   > Note: The `-t stdio` argument is essential here because it overrides the default SSE mode in the Docker image.
 
 **Using VSCode with remote MCP server**
 
-Make sure your `.vscode/settings.json` includes:
+If you're using VSCode and running the MCP server in SSE mode (which is the default when using the Docker image without overriding the transport), make sure your `.vscode/settings.json` includes the following:
 
 ```json
 "mcp": {
@@ -219,13 +227,14 @@ To use debug mode with the Claude Desktop configuration, update your config as f
       "args": [
         "run",
         "--rm",
-        "-p",
-        "8000:8000",
+        "-i",
         "-e",
         "GRAFANA_URL",
         "-e",
         "GRAFANA_API_KEY",
         "mcp/grafana",
+        "-t",
+        "stdio",
         "-debug"
       ],
       "env": {
@@ -237,28 +246,42 @@ To use debug mode with the Claude Desktop configuration, update your config as f
 }
 ```
 
+> Note: As with the standard configuration, the `-t stdio` argument is required to override the default SSE mode in the Docker image.
+
 ## Development
 
 Contributions are welcome! Please open an issue or submit a pull request if you have any suggestions or improvements.
 
 This project is written in Go. Install Go following the instructions for your platform.
 
-To run the server, use:
+To run the server locally in STDIO mode (which is the default for local development), use:
 
 ```bash
 make run
 ```
 
-You can also run the server using the SSE transport inside a custom built Docker image. To build the image, use
+To run the server locally in SSE mode, use:
+
+```bash
+go run ./cmd/mcp-grafana --transport sse
+```
+
+You can also run the server using the SSE transport inside a custom built Docker image. Just like the published Docker image, this custom image's entrypoint defaults to SSE mode. To build the image, use:
 
 ```
 make build-image
 ```
 
-And to run the image, use:
+And to run the image in SSE mode (the default), use:
 
 ```
 docker run -it --rm -p 8000:8000 mcp-grafana:latest
+```
+
+If you need to run it in STDIO mode instead, override the transport setting:
+
+```
+docker run -it --rm mcp-grafana:latest -t stdio
 ```
 
 ### Testing
