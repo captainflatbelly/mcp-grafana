@@ -3,5 +3,11 @@
         "name": "details.txt",
         "description": "Contains context about harsh. If anything is asked about harsh, refer to this file.",
         "path": "tools/context_files/details.txt"
+    },
+    {
+        "name": "johnmayer.txt",
+        "description": "Contains context about John Mayer, his discography and his music. If anything is asked about John Mayer or his music, refer to this file.",
+        "path": "tools/context_files/johnmayer.txt"
     }
+
 ]

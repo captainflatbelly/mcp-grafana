@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/grafana/grafana-plugin-sdk-go/backend/gtime"
+	
 	mcpgrafana "github.com/grafana/mcp-grafana"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -103,70 +104,122 @@ var ListPrometheusMetricMetadata = mcpgrafana.MustTool(
 	mcp.WithReadOnlyHintAnnotation(true),
 )
 
+// QueryPrometheusParams allows 'from' and 'to' to be RFC3339, epoch ms string, or relative time ("now-5m", "now-1h").
 type QueryPrometheusParams struct {
-	DatasourceUID string `json:"datasourceUid" jsonschema:"required,description=The UID of the datasource to query"`
-	Expr          string `json:"expr" jsonschema:"required,description=The PromQL expression to query"`
-	StartTime     string `json:"startTime" jsonschema:"required,description=The start time. Supported formats are RFC3339 or relative to now (e.g. 'now'\\, 'now-1.5h'\\, 'now-2h45m'). Valid time units are 'ns'\\, 'us' (or 'µs')\\, 'ms'\\, 's'\\, 'm'\\, 'h'\\, 'd'."`
-	EndTime       string `json:"endTime,omitempty" jsonschema:"description=The end time. Required if queryType is 'range'\\, ignored if queryType is 'instant' Supported formats are RFC3339 or relative to now (e.g. 'now'\\, 'now-1.5h'\\, 'now-2h45m'). Valid time units are 'ns'\\, 'us' (or 'µs')\\, 'ms'\\, 's'\\, 'm'\\, 'h'\\, 'd'."`
-	StepSeconds   int    `json:"stepSeconds,omitempty" jsonschema:"description=The time series step size in seconds. Required if queryType is 'range'\\, ignored if queryType is 'instant'"`
-	QueryType     string `json:"queryType,omitempty" jsonschema:"description=The type of query to use. Either 'range' or 'instant'"`
+    DatasourceUID string `json:"datasourceUid" jsonschema:"required,description=The UID of the datasource to query"`
+    Expr          string `json:"expr" jsonschema:"required,description=The PromQL expression to query"`
+    From          string `json:"from" jsonschema:"required,description=Start time (RFC3339, epoch ms, or relative to now like 'now-5m')"`
+    To            string `json:"to" jsonschema:"required,description=End time (RFC3339, epoch ms, or relative to now like 'now')"`
+    StepSeconds   int    `json:"stepSeconds,omitempty" jsonschema:"description=Time series step size in seconds. Required if queryType is 'range'"`
+    QueryType     string `json:"queryType,omitempty" jsonschema:"description=The type of query to use. Either 'range' or 'instant'"`
+	Variables     map[string]string `json:"variables,omitempty"` 
 }
 
-func parseTime(timeStr string) (time.Time, error) {
-	tr := gtime.TimeRange{
-		From: timeStr,
-		Now:  time.Now(),
-	}
-	return tr.ParseFrom()
+
+// parseUserTime handles RFC3339, epoch ms, or relative ("now-5m", "now-1h").
+func parseUserTime(input string, now time.Time) (time.Time, error) {
+    input = strings.TrimSpace(input)
+    if input == "" {
+        return time.Time{}, fmt.Errorf("empty time string")
+    }
+    if input == "now" {
+        return now, nil
+    }
+    // Try epoch ms
+    if ms, err := strconv.ParseInt(input, 10, 64); err == nil && ms > 1000000000000 {
+        return time.Unix(0, ms*int64(time.Millisecond)), nil
+    }
+    // Try RFC3339
+    if t, err := time.Parse(time.RFC3339, input); err == nil {
+        return t, nil
+    }
+    // Try relative: now-5m, now-1h, now-2h30m, now-2d
+    relRe := regexp.MustCompile(`^now-(\d+d)?(\d+h)?(\d+m)?(\d+s)?$`)
+    if matches := relRe.FindStringSubmatch(input); matches != nil {
+        durStr := ""
+        for i := 1; i <= 4; i++ {
+            if matches[i] != "" {
+                durStr += matches[i]
+            }
+        }
+        if d, err := parseDurationWithDays(durStr); err == nil {
+            return now.Add(-d), nil
+        }
+    }
+    return time.Time{}, fmt.Errorf("invalid time format: %s", input)
+}
+
+// parseDurationWithDays supports days in duration (e.g. "2d5h30m").
+func parseDurationWithDays(s string) (time.Duration, error) {
+    // Replace "d" with hours for time.ParseDuration
+    re := regexp.MustCompile(`(\d+)d`)
+    s = re.ReplaceAllStringFunc(s, func(dayStr string) string {
+        days, _ := strconv.Atoi(strings.TrimSuffix(dayStr, "d"))
+        return fmt.Sprintf("%dh", days*24)
+    })
+    return time.ParseDuration(s)
 }
 
 func queryPrometheus(ctx context.Context, args QueryPrometheusParams) (model.Value, error) {
-	promClient, err := promClientFromContext(ctx, args.DatasourceUID)
-	if err != nil {
-		return nil, fmt.Errorf("getting Prometheus client: %w", err)
+	var variableRegex = regexp.MustCompile(`\$\w+`)
+    promClient, err := promClientFromContext(ctx, args.DatasourceUID)
+    if err != nil {
+        return nil, fmt.Errorf("getting Prometheus client: %w", err)
+    }
+
+    queryType := args.QueryType
+    if queryType == "" {
+        queryType = "range"
+    }
+
+	queryType = "range"
+
+	expr := args.Expr
+	for name, value := range args.Variables {
+		expr = strings.ReplaceAll(expr, "$"+name, value)
 	}
 
-	queryType := args.QueryType
-	if queryType == "" {
-		queryType = "range"
+	unresolved := variableRegex.FindAllString(expr, -1)
+	if len(unresolved) > 0 {
+		return nil, fmt.Errorf("unresolved variables in query: %v", unresolved)
 	}
 
-	var startTime time.Time
-	startTime, err = parseTime(args.StartTime)
-	if err != nil {
-		return nil, fmt.Errorf("parsing start time: %w", err)
-	}
 
-	if queryType == "range" {
-		if args.StepSeconds == 0 {
-			return nil, fmt.Errorf("stepSeconds must be provided when queryType is 'range'")
-		}
+    now := time.Now()
+    var fromTime, toTime time.Time
 
-		var endTime time.Time
-		endTime, err = parseTime(args.EndTime)
-		if err != nil {
-			return nil, fmt.Errorf("parsing end time: %w", err)
-		}
+    fromTime, err = parseUserTime(args.From, now)
+    if err != nil {
+        return nil, fmt.Errorf("parsing from time: %w", err)
+    }
 
-		step := time.Duration(args.StepSeconds) * time.Second
-		result, _, err := promClient.QueryRange(ctx, args.Expr, promv1.Range{
-			Start: startTime,
-			End:   endTime,
-			Step:  step,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("querying Prometheus range: %w", err)
-		}
-		return result, nil
-	} else if queryType == "instant" {
-		result, _, err := promClient.Query(ctx, args.Expr, startTime)
-		if err != nil {
-			return nil, fmt.Errorf("querying Prometheus instant: %w", err)
-		}
-		return result, nil
-	}
+    if queryType == "range" {
+        toTime, err = parseUserTime(args.To, now)
+        if err != nil {
+            return nil, fmt.Errorf("parsing to time: %w", err)
+        }
+        // Declare and initialize stepSeconds here.
+        // You can choose a default, e.g., 60 seconds.
+        stepSeconds := 30
+        step := time.Duration(stepSeconds) * time.Second
+        result, _, err := promClient.QueryRange(ctx, expr, promv1.Range{
+            Start: fromTime,
+            End:   toTime,
+            Step:  step,
+        })
+        if err != nil {
+            return nil, fmt.Errorf("querying Prometheus range: %w", err)
+        }
+        return result, nil
+    } else if queryType == "instant" {
+        result, _, err := promClient.Query(ctx, expr, fromTime)
+        if err != nil {
+            return nil, fmt.Errorf("querying Prometheus instant: %w", err)
+        }
+        return result, nil
+    }
 
-	return nil, fmt.Errorf("invalid query type: %s", queryType)
+    return nil, fmt.Errorf("invalid query type: %s", queryType)
 }
 
 var QueryPrometheus = mcpgrafana.MustTool(

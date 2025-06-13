@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
-
+	"regexp"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -81,10 +81,13 @@ type panelQuery struct {
 	Title      string         `json:"title"`
 	Query      string         `json:"query"`
 	Datasource datasourceInfo `json:"datasource"`
+	Variables  []string       `json:"variables"`
 }
+
 
 func GetDashboardPanelQueriesTool(ctx context.Context, args DashboardPanelQueriesParams) ([]panelQuery, error) {
 	result := make([]panelQuery, 0)
+	var variableRegex = regexp.MustCompile(`\$\w+`)
 
 	dashboard, err := getDashboardByUID(ctx, GetDashboardByUIDParams(args))
 	if err != nil {
@@ -130,10 +133,23 @@ func GetDashboardPanelQueriesTool(ctx context.Context, args DashboardPanelQuerie
 			}
 			expr, _ := target["expr"].(string)
 			if expr != "" {
+
+				rawVars := variableRegex.FindAllString(expr, -1)
+				var uniqueVars []string
+				var seen = make(map[string]bool)
+				for _, v := range rawVars {
+					name := v[1:] 
+					if !seen[name] {
+						seen[name] = true
+						uniqueVars = append(uniqueVars, name)
+					}
+				}
+
 				result = append(result, panelQuery{
-					Title:      title,
-					Query:      expr,
-					Datasource: datasourceInfo,
+				Title:      title,
+				Query:      expr,
+				Datasource: datasourceInfo,
+				Variables:  uniqueVars,
 				})
 			}
 		}

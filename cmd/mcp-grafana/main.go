@@ -156,7 +156,7 @@ func main() {
 		"sse",
 		"Transport type (stdio or sse)",
 	)
-	addr := flag.String("sse-address", "localhost:8006", "The host and port to start the sse server on")
+	addr := flag.String("sse-address", "localhost:8005", "The host and port to start the sse server on")
 	basePath := flag.String("base-path", "", "Base path for the sse server")
 	logLevel := flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 	var dt disabledTools
