@@ -1,0 +1,14 @@
+# Dockerfile2.dev
+FROM golang:1.22
+
+WORKDIR /app
+
+# Only install dependencies
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+
+# Install `air` for hot reloading (optional but recommended)
+RUN go install github.com/cosmtrek/air@latest
+
+CMD ["go", "run", "main.go"]  # or just ["air"]

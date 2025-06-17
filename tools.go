@@ -51,7 +51,7 @@ func MustTool[T any, R any](
 // ToolHandlerFunc is the type of a handler function for a tool.
 type ToolHandlerFunc[T any, R any] = func(ctx context.Context, request T) (R, error)
 
-// ConvertTool converts a toolHandler function to a Tool and ToolHandlerFunc.
+// ConvertTool converts a toolHandler function to a Tool andcd ToolHandlerFunc.
 //
 // The toolHandler function must have two arguments: a context.Context and a struct
 // to be used as the parameters for the tool. The second argument must not be a pointer,

@@ -325,3 +325,4 @@ func ComposedHTTPContextFunc(debug bool) server.HTTPContextFunc {
 		ExtractIncidentClientFromHeaders,
 	)
 }
+

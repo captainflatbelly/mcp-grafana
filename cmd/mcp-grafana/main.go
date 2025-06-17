@@ -159,12 +159,12 @@ func run(transport, addr, basePath string, logLevel slog.Level, dt disabledTools
 		srv.SetContextFunc(mcpgrafana.ComposedStdioContextFunc(gc.debug))
 		slog.Info("Starting Grafana MCP server using stdio transport")
 		return srv.Listen(context.Background(), os.Stdin, os.Stdout)
+	
 	case "sse":
 		srv := server.NewSSEServer(s,
-			server.WithSSEContextFunc(mcpgrafana.ComposedSSEContextFunc(gc)),
-			server.WithStaticBasePath(basePath),
+			server.WithHTTPContextFunc(mcpgrafana.ComposedHTTPContextFunc(gc.debug)),
 		)
-		slog.Info("Starting Grafana MCP server using SSE transport", "address", addr, "basePath", basePath)
+		slog.Info("Starting Grafana MCP server using SSE transport", "address", addr)
 		if err := srv.Start(addr); err != nil {
 			return fmt.Errorf("Server error: %v", err)
 		}
