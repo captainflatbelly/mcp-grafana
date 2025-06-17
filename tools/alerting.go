@@ -9,7 +9,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	mcpgrafana "github.com/grafana/mcp-grafana"
+	mcpgrafana "mcp-grafana-local"
 )
 
 const (

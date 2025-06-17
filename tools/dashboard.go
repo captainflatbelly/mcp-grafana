@@ -6,9 +6,10 @@ import (
 	"regexp"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"log/slog"
 
 	"github.com/grafana/grafana-openapi-client-go/models"
-	mcpgrafana "github.com/grafana/mcp-grafana"
+	mcpgrafana "mcp-grafana-local"
 )
 
 type GetDashboardByUIDParams struct {
@@ -84,79 +85,103 @@ type panelQuery struct {
 	Variables  []string       `json:"variables"`
 }
 
-
 func GetDashboardPanelQueriesTool(ctx context.Context, args DashboardPanelQueriesParams) ([]panelQuery, error) {
-	result := make([]panelQuery, 0)
 	var variableRegex = regexp.MustCompile(`\$\w+`)
 
+	
+
+	// Recursive function to extract queries from any level of panel nesting
+	var extractQueries func(panels []any) []panelQuery
+	extractQueries = func(panels []any) []panelQuery {
+		var result []panelQuery
+
+		for _, p := range panels {
+			panel, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			// If this is a row panel with nested panels in "collapsed"
+			if collapsed, ok := panel["collapsed"].([]any); ok {
+				result = append(result, extractQueries(collapsed)...)
+			}
+
+			// Some nested dashboards use "panels" as a key within a panel (rare)
+			if innerPanels, ok := panel["panels"].([]any); ok {
+				result = append(result, extractQueries(innerPanels)...)
+			}
+
+			title, _ := panel["title"].(string)
+
+			// Handle datasource
+			var dsInfo datasourceInfo
+			if dsField, dsExists := panel["datasource"]; dsExists && dsField != nil {
+				if dsMap, ok := dsField.(map[string]any); ok {
+					if uid, ok := dsMap["uid"].(string); ok {
+						dsInfo.UID = uid
+					}
+					if dsType, ok := dsMap["type"].(string); ok {
+						dsInfo.Type = dsType
+					}
+				}
+			}
+
+			// Extract queries
+			targets, ok := panel["targets"].([]any)
+			if !ok {
+				continue
+			}
+			for _, t := range targets {
+				target, ok := t.(map[string]any)
+				if !ok {
+					continue
+				}
+				expr, _ := target["expr"].(string)
+				if expr != "" {
+					rawVars := variableRegex.FindAllString(expr, -1)
+					var uniqueVars []string
+					seen := make(map[string]bool)
+					for _, v := range rawVars {
+						name := v[1:]
+						if !seen[name] {
+							seen[name] = true
+							uniqueVars = append(uniqueVars, name)
+						}
+					}
+
+					result = append(result, panelQuery{
+						Title:      title,
+						Query:      expr,
+						Datasource: dsInfo,
+						Variables:  uniqueVars,
+					})
+				}
+			}
+		}
+
+		return result
+	}
+
+	// Load the dashboard
 	dashboard, err := getDashboardByUID(ctx, GetDashboardByUIDParams(args))
 	if err != nil {
-		return result, fmt.Errorf("get dashboard by uid: %w", err)
+		return nil, fmt.Errorf("get dashboard by uid: %w", err)
 	}
 
 	db, ok := dashboard.Dashboard.(map[string]any)
 	if !ok {
-		return result, fmt.Errorf("dashboard is not a JSON object")
+		return nil, fmt.Errorf("dashboard is not a JSON object")
 	}
+
 	panels, ok := db["panels"].([]any)
 	if !ok {
-		return result, fmt.Errorf("panels is not a JSON array")
+		return nil, fmt.Errorf("panels is not a JSON array")
 	}
 
-	for _, p := range panels {
-		panel, ok := p.(map[string]any)
-		if !ok {
-			continue
-		}
-		title, _ := panel["title"].(string)
-
-		var datasourceInfo datasourceInfo
-		if dsField, dsExists := panel["datasource"]; dsExists && dsField != nil {
-			if dsMap, ok := dsField.(map[string]any); ok {
-				if uid, ok := dsMap["uid"].(string); ok {
-					datasourceInfo.UID = uid
-				}
-				if dsType, ok := dsMap["type"].(string); ok {
-					datasourceInfo.Type = dsType
-				}
-			}
-		}
-
-		targets, ok := panel["targets"].([]any)
-		if !ok {
-			continue
-		}
-		for _, t := range targets {
-			target, ok := t.(map[string]any)
-			if !ok {
-				continue
-			}
-			expr, _ := target["expr"].(string)
-			if expr != "" {
-
-				rawVars := variableRegex.FindAllString(expr, -1)
-				var uniqueVars []string
-				var seen = make(map[string]bool)
-				for _, v := range rawVars {
-					name := v[1:] 
-					if !seen[name] {
-						seen[name] = true
-						uniqueVars = append(uniqueVars, name)
-					}
-				}
-
-				result = append(result, panelQuery{
-				Title:      title,
-				Query:      expr,
-				Datasource: datasourceInfo,
-				Variables:  uniqueVars,
-				})
-			}
-		}
-	}
-
-	return result, nil
+	// Extract all queries recursively
+	return extractQueries(panels), nil
 }
+
 
 var GetDashboardPanelQueries = mcpgrafana.MustTool(
 	"get_dashboard_panel_queries",
@@ -168,6 +193,7 @@ var GetDashboardPanelQueries = mcpgrafana.MustTool(
 )
 
 func AddDashboardTools(mcp *server.MCPServer) {
+	slog.Info("Registering dashboard tools")
 	GetDashboardByUID.Register(mcp)
 	UpdateDashboard.Register(mcp)
 	GetDashboardPanelQueries.Register(mcp)

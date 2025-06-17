@@ -10,10 +10,14 @@ import (
 	"strings"
 	"io/ioutil"
 
+
+
+    "mcp-grafana-local/prompts"
+	mcpgrafana "mcp-grafana-local"
+	"mcp-grafana-local/tools"
+
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	mcpgrafana "github.com/grafana/mcp-grafana"
-	"github.com/grafana/mcp-grafana/tools"
 )
 
 func maybeAddTools(s *server.MCPServer, tf func(*server.MCPServer), enabledTools []string, disable bool, category string) {
@@ -97,6 +101,32 @@ func newServer(dt disabledTools) *server.MCPServer {
 	slog.Info("Resource registered", "uri", resource.URI)
 	cwd, _ := os.Getwd()
 	fmt.Println("Working directory:", cwd)
+
+// 	prompt := mcp.NewPrompt("extract_promql_from_grafana",
+//     mcp.WithPromptDescription(
+//         "Extract and execute the Prometheus query for 'Rate of Calls Offer Accepted' from the Grafana dashboard 'CCAAS-Prod'",
+//     ),
+//     mcp.WithArgument("dashboard_uid",
+//         mcp.ArgumentDescription("UID of the Grafana dashboard"),
+//         mcp.RequiredArgument(),
+//     ),
+//     mcp.WithArgument("panel_name",
+//         mcp.ArgumentDescription("Name of the panel to search in (e.g., 'Voice Agent State')"),
+//         mcp.RequiredArgument(),
+//     ),
+//     mcp.WithArgument("query_variable",
+//         mcp.ArgumentDescription("Name of the Prometheus query/metric (e.g., 'Rate of Calls Offer Accepted')"),
+//         mcp.RequiredArgument(),
+//     ),
+//     mcp.WithArgument("datasource_uid",
+//         mcp.ArgumentDescription("UID of the Prometheus datasource"),
+//         mcp.RequiredArgument(),
+//     ),
+// )
+
+// 	s.AddPrompt(prompt, handleExtractQuery)
+	//prompts.RegisterPrompts(s)
+	prompts.RegisterPrompts(s);
 	return s
 }
 
@@ -131,13 +161,14 @@ func run(transport, addr, basePath string, logLevel slog.Level, dt disabledTools
 		return srv.Listen(context.Background(), os.Stdin, os.Stdout)
 	case "sse":
 		srv := server.NewSSEServer(s,
-			server.WithHTTPContextFunc(mcpgrafana.ComposedHTTPContextFunc(gc.debug)),
+			server.WithSSEContextFunc(mcpgrafana.ComposedSSEContextFunc(gc)),
 			server.WithStaticBasePath(basePath),
 		)
-		slog.Info("Starting Grafana MCP server using SSE transport paired with resources", "address", addr, "basePath", basePath)
+		slog.Info("Starting Grafana MCP server using SSE transport", "address", addr, "basePath", basePath)
 		if err := srv.Start(addr); err != nil {
 			return fmt.Errorf("Server error: %v", err)
 		}
+
 	default:
 		return fmt.Errorf(
 			"Invalid transport type: %s. Must be 'stdio' or 'sse'",
@@ -156,6 +187,7 @@ func main() {
 		"sse",
 		"Transport type (stdio or sse)",
 	)
+
 	addr := flag.String("sse-address", "localhost:8005", "The host and port to start the sse server on")
 	basePath := flag.String("base-path", "", "Base path for the sse server")
 	logLevel := flag.String("log-level", "info", "Log level (debug, info, warn, error)")
@@ -177,3 +209,87 @@ func parseLevel(level string) slog.Level {
 	}
 	return l
 }
+
+
+// type PromptTemplate struct {
+//     Name        string
+//     Description string
+//     Template    string
+//     Variables   []string
+// }
+ 
+
+
+
+// func handleExtractQuery(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+//     args := req.Params.Arguments
+//     if args == nil {
+//         return nil, fmt.Errorf("missing prompt arguments")
+//     }
+
+//     // Required parameters
+//     dashboardUID, ok := args["dashboardUID"]
+//     if !ok || dashboardUID == "" {
+//         return nil, fmt.Errorf("argument 'dashboardUID' is required")
+//     }
+//     metric, ok := args["metric"]
+//     if !ok || metric == "" {
+//         return nil, fmt.Errorf("argument 'metric' is required")
+//     }
+//     prometheusUID, ok := args["prometheusUID"]
+//     if !ok || prometheusUID == "" {
+//         return nil, fmt.Errorf("argument 'prometheusUID' is required")
+//     }
+//     panelTitle, ok := args["panelTitle"]
+//     if !ok || panelTitle == "" {
+//         return nil, fmt.Errorf("argument 'panelTitle' is required")
+//     }
+
+//     // Substitute variables into the system prompt template
+//     promptText := fmt.Sprintf(
+//         `From the Grafana dashboard titled "CCAAS-Prod" (%s), extract the Prometheus query used to calculate %s
+
+// Use the Prometheus datasource UID: %s
+// Task Steps:
+
+// ... (omitted steps) ...
+// END`,
+//         dashboardUID,
+//         metric,
+//         prometheusUID,
+//     )
+
+//     // // If variable resolution is needed (e.g. $foo in promptText), detect now:
+//     // unresolvedVars := detectTemplateVars(promptText) // implement detection logic
+//     // if len(unresolvedVars) > 0 {
+//     //     // Prompt user to supply values
+//     //     var buffer strings.Builder
+//     //     buffer.WriteString(promptText + "\n\n")
+//     //     buffer.WriteString("The following variables are unresolved:\n")
+//     //     for _, v := range unresolvedVars {
+//     //         buffer.WriteString(fmt.Sprintf("• %s\n", v))
+//     //     }
+//     //     buffer.WriteString("Please provide values for these variables before proceeding.")
+
+//     //     return &mcp.GetPromptResult{
+//     //         Description: "Resolve template variables",
+//     //         Messages: []mcp.PromptMessage{
+//     //             {
+//     //                 Role:    "user",
+//     //                 Content: mcp.NewTextContent(buffer.String()),
+//     //             },
+//     //         },
+//     //     }, nil
+//     // }
+
+//     // All variables are resolved, now return final system prompt
+//     return &mcp.GetPromptResult{
+//         Description: "Ready to execute query extraction",
+//         Messages: []mcp.PromptMessage{
+//             {
+//                 Role:    "user",
+//                 Content: mcp.NewTextContent(promptText),
+//             },
+//         },
+//     }, nil
+// }

@@ -9,7 +9,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/grafana/grafana-openapi-client-go/models"
-	mcpgrafana "github.com/grafana/mcp-grafana"
+	mcpgrafana "mcp-grafana-local"
 )
 
 type ListDatasourcesParams struct {

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "spike-detection-prometheus-query",
+    "name": "Detect Spikes in Prometheus Metric",
+    "description": "Extract and analyze Prometheus query from Grafana dashboard to detect spikes in metric values",
+    "template": "From the Grafana dashboard titled \"{{.dashboardTitle}}\" (dashboard UID: {{.dashboardUID}}), extract the Prometheus query used to calculate {{.metric}}\n\nUse the Prometheus datasource UID: {{.datasourceUID}}\n\nTask Steps:\n\nQuery Extraction\nLocate the exact Prometheus query from the dashboard panel for {{.metric}} under the {{.panelTitle}}\n\nVariable Resolution\nIf the query contains any template variables \nIdentify and list them.\nPrompt me to provide concrete values for each unresolved variable.\nSubstitute the values into the query.\n\nTime Range Input\nPrompt me to enter a time range (for example: now-1h to now or ISO timestamps). Do not execute the query until the time range is specified.\n\nQuery Execution\nOnce all variables are resolved and the time range is defined, execute the query against the Prometheus datasource and retrieve the time series data as (timestamp, throttle percentage) pairs.\n\nSpike Detection Algorithm\nAnalyze the data for spikes using the following method:\nFor each pair of adjacent throttle percentage values:\nCalculate the relative increase using the formula:\n(current - previous) / max(previous, 1e-6)\nIf the relative increase is greater than or equal to 0.5 (i.e., 50%) and the absolute increase is greater than or equal to 10 percentage points, mark it as a spike.\n\nOutput Requirements:\n\nReturn the final substituted Prometheus query.\nDisplay the time series data in tabular format.\nIf a spike is detected:\nShow the timestamps where the spike started and peaked.\nShow the values before and after the spike.\nShow the relative and absolute increase between the values.\nEND",
+    "arguments": [
+      {
+        "name": "dashboardTitle",
+        "description": "Title of the Grafana dashboard",
+        "required": true
+      },
+      {
+        "name": "dashboardUID",
+        "description": "UID of the Grafana dashboard",
+        "required": true
+      },
+      {
+        "name": "panelTitle",
+        "description": "Title of the Grafana panel that contains the Prometheus query",
+        "required": true
+      },
+      {
+        "name": "metric",
+        "description": "Name or description of the Prometheus metric to extract and analyze",
+        "required": true
+      },
+      {
+        "name": "datasourceUID",
+        "description": "UID of the Prometheus datasource configured in Grafana",
+        "required": true
+      }
+    ]
+  }
+]

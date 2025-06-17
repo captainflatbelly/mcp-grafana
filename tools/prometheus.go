@@ -9,7 +9,7 @@ import (
 	"time"
 
 	
-	mcpgrafana "github.com/grafana/mcp-grafana"
+	mcpgrafana "mcp-grafana-local"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/prometheus/client_golang/api"
@@ -160,6 +160,15 @@ func parseDurationWithDays(s string) (time.Duration, error) {
     return time.ParseDuration(s)
 }
 
+type UnresolvedVariablesError struct {
+	Missing []string
+}
+
+func (e *UnresolvedVariablesError) Error() string {
+	return fmt.Sprintf("unresolved variables in query: %v", e.Missing, "please prompt user to provide variable values and resolve them")
+}
+
+
 func queryPrometheus(ctx context.Context, args QueryPrometheusParams) (model.Value, error) {
 	var variableRegex = regexp.MustCompile(`\$\w+`)
     promClient, err := promClientFromContext(ctx, args.DatasourceUID)
@@ -181,7 +190,7 @@ func queryPrometheus(ctx context.Context, args QueryPrometheusParams) (model.Val
 
 	unresolved := variableRegex.FindAllString(expr, -1)
 	if len(unresolved) > 0 {
-		return nil, fmt.Errorf("unresolved variables in query: %v", unresolved)
+		return nil, &UnresolvedVariablesError{Missing: unresolved}
 	}
 
 

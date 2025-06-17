@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	mcpgrafana "github.com/grafana/mcp-grafana"
+	mcpgrafana "mcp-grafana-local"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

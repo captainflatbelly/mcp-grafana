@@ -8,7 +8,7 @@ import (
 
 	"github.com/grafana/grafana-openapi-client-go/client/teams"
 	"github.com/grafana/grafana-openapi-client-go/models"
-	mcpgrafana "github.com/grafana/mcp-grafana"
+	mcpgrafana "mcp-grafana-local"
 )
 
 type ListTeamsParams struct {

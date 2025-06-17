@@ -11,7 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 
-	mcpgrafana "github.com/grafana/mcp-grafana"
+	mcpgrafana "mcp-grafana-local"
 )
 
 // FileMeta holds metadata about a file.

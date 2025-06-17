@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	mcpgrafana "github.com/grafana/mcp-grafana"
+	mcpgrafana "mcp-grafana-local"
 )
 
 // createCloudTestContext creates a context with a Grafana URL, Grafana API key and
